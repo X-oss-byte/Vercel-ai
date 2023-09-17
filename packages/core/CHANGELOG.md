@@ -1,5 +1,70 @@
 # ai
 
+## 2.2.6
+
+### Patch Changes
+
+- e5bf68d: react/use-chat: fix experimental functions returning proper function messages
+
+  Closes #478
+
+## 2.2.5
+
+### Patch Changes
+
+- e5bf68d: react/use-chat: fix experimental functions returning proper function messages
+
+  Closes #478
+
+## 2.2.4
+
+### Patch Changes
+
+- 7b389a7: fix: improve safety for type check in openai-stream
+
+## 2.2.3
+
+### Patch Changes
+
+- 867a3f9: Fix client-side function calling (#467, #469)
+
+  add Completion type from the `openai` SDK to openai-stream (#472)
+
+## 2.2.2
+
+### Patch Changes
+
+- 84e0cc8: Add experimental_StreamData and new opt-in wire protocol to enable streaming additional data. See https://github.com/vercel/ai/pull/425.
+
+  Changes `onCompletion` back to run every completion, including recursive function calls. Adds an `onFinish` callback that runs once everything has streamed.
+
+  If you're using experimental function handlers on the server _and_ caching via `onCompletion`,
+  you may want to adjust your caching code to account for recursive calls so the same key isn't used.
+
+  ```
+  let depth = 0
+
+  const stream = OpenAIStream(response, {
+      async onCompletion(completion) {
+        depth++
+        await kv.set(key + '_' + depth, completion)
+        await kv.expire(key + '_' + depth, 60 * 60)
+      }
+    })
+  ```
+
+## 2.2.1
+
+### Patch Changes
+
+- 04084a8: openai-stream: fix experimental_onFunctionCall types for OpenAI SDK v4
+
+## 2.2.0
+
+### Minor Changes
+
+- dca1ed9: Update packages and examples to use OpenAI SDK v4
+
 ## 2.1.34
 
 ### Patch Changes
