@@ -1,6 +1,4 @@
 {
-  "openai": "OpenAI",
-  "huggingface": "Hugging Face",
-  "anthropic": "Anthropic",
-  "langchain": "LangChain"
+  "frameworks": "Frameworks",
+  "providers": "Providers"
 }

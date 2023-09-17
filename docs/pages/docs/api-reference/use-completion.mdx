@@ -33,10 +33,9 @@ export default function Completion() {
   })
 
   return (
-    <div className="mx-auto w-full max-w-md py-24 flex flex-col stretch">
+    <div>
       <form onSubmit={handleSubmit}>
         <input
-          className="fixed w-full max-w-md bottom-0 border border-gray-300 rounded mb-8 shadow-xl p-2"
           value={input}
           placeholder="Enter your prompt..."
           onChange={handleInputChange}
@@ -83,10 +82,9 @@ export default function Completion() {
   }, 500)
 
   return (
-    <div className="mx-auto flex w-full max-w-md flex-col space-y-5 py-24">
+    <div>
       <p>Current state: {isLoading ? 'Generating...' : 'Idle'}</p>
       <textarea
-        className="w-full max-w-md rounded border border-gray-300 p-2 shadow-xl"
         placeholder="Enter your prompt..."
         onChange={handleInputChange}
       />
@@ -144,6 +142,11 @@ export default function Completion() {
       'body',
       'any',
       'An optional, additional body object to be passed to the API endpoint.'
+    ],
+    [
+      'credentials',
+      '"omit" | "same-origin" | "include"',
+      'An optional literal that sets the mode of credentials to be used on the request. Defaults to "same-origin".'
     ]
   ]}
 />
@@ -202,7 +205,7 @@ To use `useCompletion` in Svelte projects, you can import it from the `ai/svelte
 
 ```tsx filename="routes/+page.svelte" {4}
 <script>
-  import { useChat } from 'ai/svelte'
+  import { useCompletion } from 'ai/svelte'
 
   const { input, handleSubmit, completion } = useCompletion()
 </script>
@@ -214,6 +217,131 @@ To use `useCompletion` in Svelte projects, you can import it from the `ai/svelte
     <button type="submit">Send</button>
   </form>
 </div>
+```
+
+### `UseCompletionOptions`
+
+<OptionTable
+  options={[
+    [
+      'api',
+      "string = '/api/completion'",
+      'The API endpoint that accepts a `{ prompt: string }` object and returns a stream of tokens for the AI completion response. Defaults to `/api/completion`.'
+    ],
+    [
+      'id',
+      'string',
+      'An unique identifier for the completion. If not provided, a random one will be generated. When provided, the `useCompletion` function with the same `id` will have shared states across components. This is useful when you have multiple components showing the same chat stream.'
+    ],
+    [
+      'initialInput',
+      "string = ''",
+      'An optional string for the initial prompt input.'
+    ],
+    [
+      'initialCompletion',
+      "string = ''",
+      'An optional string for the initial completion result.'
+    ],
+    [
+      'onResponse',
+      '(res: Response) => void',
+      'An optional callback function that is called with the response from the API endpoint. Useful for throwing customized errors or logging.'
+    ],
+    [
+      'onFinish',
+      '(prompt: string, completion: string) => void',
+      'An optional callback function that is called when the completion stream ends.'
+    ],
+    [
+      'onError',
+      '(err: Error) => void',
+      'An optional callback that will be called when the chat stream encounters an error'
+    ],
+    [
+      'headers',
+      'Record<string, string> | Headers',
+      'An optional object of headers to be passed to the API endpoint.'
+    ],
+    [
+      'body',
+      'any',
+      'An optional, additional body object to be passed to the API endpoint.'
+    ],
+    [
+      'credentials',
+      '"omit" | "same-origin" | "include"',
+      'An optional literal that sets the mode of credentials to be used on the request. Defaults to "same-origin".'
+    ]
+  ]}
+/>
+
+### `UseCompletionHelpers`
+
+The `useCompletion` function returns an object with several helper methods and variables to manage the completion state:
+
+<OptionTable
+  options={[
+    [
+      'completion',
+      'Readable<string>',
+      'A Svelte readable store of the current text completion.'
+    ],
+    [
+      'complete',
+      '(prompt: string) => Promise<string | undefined>',
+      'Function to execute text completion based on the provided prompt. Returns a promise that resolves to the completion result, or throws an error if the request fails.'
+    ],
+    [
+      'error',
+      'Readable<undefined | Error>',
+      'The error thrown during the completion process, if any.'
+    ],
+    [
+      'setCompletion',
+      '(completion: string) => void',
+      'Function to update the `completion` state locally.'
+    ],
+    ['stop', '() => void', 'Function to abort the current API request.'],
+    [
+      'input',
+      'Writable<string>',
+      'A Svelte writable store that represents the current value of the input field.'
+    ],
+    [
+      'handleSubmit',
+      '(e: React.FormEvent<HTMLFormElement>) => void',
+      'Form submission handler that automatically resets the input field and appends a user message.'
+    ],
+    [
+      'isLoading',
+      'boolean',
+      'Boolean flag indicating whether a fetch operation is currently in progress.'
+    ]
+  ]}
+/>
+
+</Tab>
+<Tab>
+To use `useCompletion` in Vue projects, you can import it from the `ai/vue` subpath. Here's an example demonstrating the use of `useCompletion` in a simple text completion interface:
+
+```tsx filename="pages/app.vue"
+<script setup>
+  import { useCompletion } from 'ai/vue'
+
+  const { input, handleSubmit, completion } = useCompletion()
+</script>
+
+<template>
+  <div>
+    <p>Completion result: {{ completion }}</p>
+    <form @submit.prevent={handleSubmit}>
+      <label for="input">Prompt</label>
+      <input v-model={input} id="input" />
+      <button type="submit">Send</button>
+    </form>
+  </div>
+</template>
 ```
 
 ### `UseCompletionOptions`
@@ -276,17 +404,17 @@ The `useCompletion` function returns an object with several helper methods and v
   options={[
     [
       'completion',
-      'Readable<string>',
-      'A Svelte readable store of the current text completion.'
+      'Ref<string>',
+      'A Vue ref wrapping the current text completion.'
     ],
     [
       'complete',
-      '(prompt: string) => Promise<string | undefined>',
-      'Function to execute text completion based on the provided prompt. Returns a promise that resolves to the completion result, or throws an error if the request fails.'
+      '(prompt: string) => Promise<string | null | undefined>',
+      'Send a new prompt to the API endpoint and update the completion state.'
     ],
     [
       'error',
-      'Readable<undefined | Error>',
+      'Ref<undefined | Error>',
       'The error thrown during the completion process, if any.'
     ],
     [
@@ -297,12 +425,12 @@ The `useCompletion` function returns an object with several helper methods and v
     ['stop', '() => void', 'Function to abort the current API request.'],
     [
       'input',
-      'Writable<string>',
-      'A Svelte writable store that represents the current value of the input field.'
+      'Ref<string>',
+      'A Vue ref wrapping the current value of the input field.'
     ],
     [
       'handleSubmit',
-      '(e: React.FormEvent<HTMLFormElement>) => void',
+      '(e: any) => void',
       'Form submission handler that automatically resets the input field and appends a user message.'
     ],
     [
@@ -312,7 +440,6 @@ The `useCompletion` function returns an object with several helper methods and v
     ]
   ]}
 />
-
 </Tab>
 </FrameworkTabs>
 
@@ -336,14 +463,7 @@ export default function PostEditorPage() {
 
   const checkAndPublish = useCallback(
     async (c: string) => {
-      const completion = await complete(
-        // a precise prompt is important for the AI to reply with the correct tokens
-        `Given the following post content, detect if it has typo or not. 
-Respond with a JSON array of typos ["typo1", "typo2", ...] or an empty [] if there's none. Only respond with an array. Post content:
-${c}
-        
-Output:\n`
-      )
+      const completion = await complete(c)
       if (!completion) throw new Error('Failed to check typos')
       const typos = JSON.parse(completion)
       // you should more validation here to make sure the response is valid
@@ -371,28 +491,36 @@ The server API formats the prompt for the AI model, and then it uses the [OpenAI
 ```tsx
 // app/api/completion/route.ts
 
-import { Configuration, OpenAIApi } from 'openai-edge'
+import OpenAI from 'openai'
 import { OpenAIStream, StreamingTextResponse } from 'ai'
 
 export const runtime = 'edge'
 
-const apiConfig = new Configuration({
+const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!
 })
-
-const openai = new OpenAIApi(apiConfig)
 
 export async function POST(req: Request) {
   // Extract the `prompt` from the body of the request
   const { prompt } = await req.json()
 
   // Request the OpenAI API for the response based on the prompt
-  const response = await openai.createChatCompletion({
+  const response = await openai.chat.completions.create({
     model: 'gpt-3.5-turbo',
     stream: true,
-    messages: [{ role: 'user', content: prompt }],
+    // a precise prompt is important for the AI to reply with the correct tokens
+    messages: [
+      {
+        role: 'user',
+        content: `Given the following post content, detect if it has typo or not. 
+Respond with a JSON array of typos ["typo1", "typo2", ...] or an empty [] if there's none. Only respond with an array. Post content:
+${prompt}
+        
+Output:\n`
+      }
+    ],
     max_tokens: 200,
-    temperature: 0.7,
+    temperature: 0, // you want absolute certainty for spell check
     top_p: 1,
     frequency_penalty: 1,
     presence_penalty: 1

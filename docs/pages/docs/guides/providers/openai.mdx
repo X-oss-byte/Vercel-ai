@@ -1,12 +1,19 @@
 ---
-title: HuggingFace
+title: OpenAI
 ---
-
-# HuggingFace
 
 import { Steps, Callout } from 'nextra-theme-docs'
 
-Vercel AI SDK provides a set of utilities to make it easy to use Hugging Face's API. In this guide, we'll walk through how to use the utilities to create a chat bot and a text completion app.
+# OpenAI
+
+Vercel AI SDK provides a set of utilities to make it easy to use OpenAI's API. In this guide, we'll walk through how to use the utilities to create a chat bot and a text completion app.
+
+<Callout>
+  Before the release of `openai@4`, we recommended using the `openai-edge`
+  library because of it's compatibility with Vercel Edge Runtime. The OpenAI SDK
+  now supports Edge Runtime out of the box, so we recommend using the official
+  `openai` library instead.
+</Callout>
 
 ## Guide: Chat Bot
 
@@ -14,77 +21,52 @@ Vercel AI SDK provides a set of utilities to make it easy to use Hugging Face's 
 
 ### Create a Next.js app
 
-Create a Next.js application and install `ai` and `@huggingface/inference`:
+Create a Next.js application and install `ai` and `openai`, the Vercel AI SDK and OpenAI API client respectively:
 
 ```sh
 pnpm dlx create-next-app my-ai-app
 cd my-ai-app
-pnpm install ai @huggingface/inference
+pnpm install ai openai
 ```
 
-### Add your Hugging Face API Key to `.env`
+### Add your OpenAI API Key to `.env`
 
-Create a `.env` file in your project root and add your Hugging Face API Key:
+Create a `.env` file in your project root and add your OpenAI API Key:
 
 ```env filename=".env"
-HUGGINGFACE_API_KEY=xxxxxxxxx
+OPENAI_API_KEY=xxxxxxxxx
 ```
 
 ### Create a Route Handler
 
-Create a Next.js Route Handler that uses the Edge Runtime and the `OpenAssistant/oasst-sft-4-pythia-12b-epoch-3.5` model to generate a response to a series of messages via the Hugging Face API, and returns the response as a streaming text response.
+Create a Next.js Route Handler that uses the Edge Runtime that we'll use to generate a chat completion via OpenAI that we'll then stream back to our Next.js.
 
 For this example, we'll create a route handler at `app/api/chat/route.ts` that accepts a `POST` request with a `messages` array of strings:
 
 ```tsx filename="app/api/chat/route.ts" showLineNumbers
-import { HfInference } from '@huggingface/inference'
-import { HuggingFaceStream, StreamingTextResponse } from 'ai'
+import OpenAI from 'openai'
+import { OpenAIStream, StreamingTextResponse } from 'ai'
 
-// Create a new Hugging Face Inference instance
-const Hf = new HfInference(process.env.HUGGINGFACE_API_KEY)
+// Create an OpenAI API client (that's edge friendly!)
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+})
 
 // IMPORTANT! Set the runtime to edge
 export const runtime = 'edge'
-
-// Build a prompt from the messages
-// Note: this is specific to the OpenAssistant model we're using
-// @see https://huggingface.co/OpenAssistant/oasst-sft-4-pythia-12b-epoch-3.5#prompting
-function buildOpenAssistantPrompt(
-  messages: { content: string; role: 'system' | 'user' | 'assistant' }[]
-) {
-  return (
-    messages
-      .map(({ content, role }) => {
-        if (role === 'user') {
-          return `<|prompter|>${content}<|endoftext|>`
-        } else {
-          return `<|assistant|>${content}<|endoftext|>`
-        }
-      })
-      .join('') + '<|assistant|>'
-  )
-}
 
 export async function POST(req: Request) {
   // Extract the `messages` from the body of the request
   const { messages } = await req.json()
 
-  const response = Hf.textGenerationStream({
-    model: 'OpenAssistant/oasst-sft-4-pythia-12b-epoch-3.5',
-    inputs: buildOpenAssistantPrompt(messages),
-    parameters: {
-      max_new_tokens: 200,
-      // @ts-ignore (this is a valid parameter specifically in OpenAssistant models)
-      typical_p: 0.2,
-      repetition_penalty: 1,
-      truncate: 1000,
-      return_full_text: false
-    }
+  // Ask OpenAI for a streaming chat completion given the prompt
+  const response = await openai.chat.completions.create({
+    model: 'gpt-3.5-turbo',
+    stream: true,
+    messages
   })
-
   // Convert the response into a friendly text-stream
-  const stream = HuggingFaceStream(response)
-
+  const stream = OpenAIStream(response)
   // Respond with the stream
   return new StreamingTextResponse(stream)
 }
@@ -92,12 +74,12 @@ export async function POST(req: Request) {
 
 <Callout>
   Vercel AI SDK provides 2 utility helpers to make the above seamless: First, we
-  pass the streaming `response` we receive from `Hf.textGenerationStream` to
-  [`HuggingFaceStream`](/docs/api-reference#huggingfacestream). This method
+  pass the streaming `response` we receive from OpenAI to
+  [`OpenAIStream`](/docs/api-reference/openai-stream). This method
   decodes/extracts the text tokens in the response and then re-encodes them
   properly for simple consumption. We can then pass that new stream directly to
-  [`StreamingTextResponse`](/docs/api-reference#streamingtextresponse). This is
-  another utility class that extends the normal Node/Edge Runtime `Response`
+  [`StreamingTextResponse`](/docs/api-reference/streaming-text-response). This
+  is another utility class that extends the normal Node/Edge Runtime `Response`
   class with the default headers you probably want (hint: `'Content-Type':
   'text/plain; charset=utf-8'` is already set for you).
 </Callout>
@@ -148,14 +130,16 @@ export default function Chat() {
 
 ### Use the Completion API
 
-Similar to the Chat Bot example above, we'll create a Next.js Route Handler that generates a text completion via the same Hugging Face API that we'll then stream back to our Next.js. It accepts a `POST` request with a `prompt` string:
+Similar to the Chat Bot example above, we'll create a Next.js Route Handler that generates a text completion via OpenAI that we'll then stream back to our Next.js. It accepts a `POST` request with a `prompt` string:
 
 ```tsx filename="app/api/completion/route.ts" showLineNumbers
-import { HfInference } from '@huggingface/inference'
-import { HuggingFaceStream, StreamingTextResponse } from 'ai'
+import OpenAI from 'openai'
+import { OpenAIStream, StreamingTextResponse } from 'ai'
 
-// Create a new Hugging Face Inference instance
-const Hf = new HfInference(process.env.HUGGINGFACE_API_KEY)
+// Create an OpenAI API client (that's edge friendly!)
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
+})
 
 // IMPORTANT! Set the runtime to edge
 export const runtime = 'edge'
@@ -164,21 +148,22 @@ export async function POST(req: Request) {
   // Extract the `prompt` from the body of the request
   const { prompt } = await req.json()
 
-  const response = await Hf.textGenerationStream({
-    model: 'OpenAssistant/oasst-sft-4-pythia-12b-epoch-3.5',
-    inputs: `<|prompter|>${prompt}<|endoftext|><|assistant|>`,
-    parameters: {
-      max_new_tokens: 200,
-      // @ts-ignore (this is a valid parameter specifically in OpenAssistant models)
-      typical_p: 0.2,
-      repetition_penalty: 1,
-      truncate: 1000,
-      return_full_text: false
-    }
+  // Ask OpenAI for a streaming completion given the prompt
+  const response = await openai.completions.create({
+    model: 'text-davinci-003',
+    stream: true,
+    prompt
   })
 
+  // Check for errors
+  if (!response.ok) {
+    return new Response(await response.text(), {
+      status: response.status
+    })
+  }
+
   // Convert the response into a friendly text-stream
-  const stream = HuggingFaceStream(response)
+  const stream = OpenAIStream(response)
 
   // Respond with the stream
   return new StreamingTextResponse(stream)
@@ -234,14 +219,14 @@ export default function Completion() {
 
 ## Guide: Save to Database After Completion
 
-It’s common to want to save the result of a completion to a database after streaming it back to the user. The `HuggingFaceStream` adapter accepts a couple of optional callbacks that can be used to do this.
+It’s common to want to save the result of a completion to a database after streaming it back to the user. The `OpenAIStream` adapter accepts a couple of optional callbacks that can be used to do this.
 
 ```tsx filename="app/api/completion/route.ts" showLineNumbers
 export async function POST(req: Request) {
   // ...
 
   // Convert the response into a friendly text-stream
-  const stream = HuggingFaceStream(response, {
+  const stream = OpenAIStream(response, {
     onStart: async () => {
       // This callback is called when the stream starts
       // You can use this to save the prompt to your database
@@ -262,4 +247,29 @@ export async function POST(req: Request) {
   // Respond with the stream
   return new StreamingTextResponse(stream)
 }
+```
+
+## Guide: Use with Azure OpenAI Service
+
+You can pass custom options to the `Configuration` from the OpenAI package to connect to the an Azure instance.
+See the [OpenAI client repository](https://github.com/openai/openai-node/blob/v4/examples/azure.ts) for a more complete example.
+
+```tsx filename="app/api/completion/route.ts"
+import OpenAI from 'openai'
+
+const resource = '<your resource name>'
+const model = '<your model>'
+
+const apiKey = process.env.AZURE_OPENAI_API_KEY
+if (!apiKey) {
+  throw new Error('AZURE_OPENAI_API_KEY is missing from the environment.')
+}
+
+// Azure OpenAI requires a custom baseURL, api-version query param, and api-key header.
+const openai = new OpenAI({
+  apiKey,
+  baseURL: `https://${resource}.openai.azure.com/openai/deployments/${model}`,
+  defaultQuery: { 'api-version': '2023-06-01-preview' },
+  defaultHeaders: { 'api-key': apiKey }
+})
 ```
