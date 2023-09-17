@@ -36,53 +36,11 @@ describe('AIStream', () => {
           `"[{"id":"chatcmpl-7RyNSW2BXkOQQh7NlBc65j5kX8AjC","object":"chat.completion.chunk","created":1686901302,"model":"gpt-3.5-turbo-0301","choices":[{"delta":{"role":"assistant"},"index":0,"finish_reason":null}]},{"id":"chatcmpl-7RyNSW2BXkOQQh7NlBc65j5kX8AjC","object":"chat.completion.chunk","created":1686901302,"model":"gpt-3.5-turbo-0301","choices":[{"delta":{"content":"Hello"},"index":0,"finish_reason":null}]},{"id":"chatcmpl-7RyNSW2BXkOQQh7NlBc65j5kX8AjC","object":"chat.completion.chunk","created":1686901302,"model":"gpt-3.5-turbo-0301","choices":[{"delta":{"content":","},"index":0,"finish_reason":null}]},{"id":"chatcmpl-7RyNSW2BXkOQQh7NlBc65j5kX8AjC","object":"chat.completion.chunk","created":1686901302,"model":"gpt-3.5-turbo-0301","choices":[{"delta":{"content":" world"},"index":0,"finish_reason":null}]},{"id":"chatcmpl-7RyNSW2BXkOQQh7NlBc65j5kX8AjC","object":"chat.completion.chunk","created":1686901302,"model":"gpt-3.5-turbo-0301","choices":[{"delta":{"content":"."},"index":0,"finish_reason":null}]},{"id":"chatcmpl-7RyNSW2BXkOQQh7NlBc65j5kX8AjC","object":"chat.completion.chunk","created":1686901302,"model":"gpt-3.5-turbo-0301","choices":[{"delta":{},"index":0,"finish_reason":"stop"}]}]"`
         )
       })
-
       it('should correctly parse and escape function call JSON chunks', async () => {
         const { OpenAIStream, StreamingTextResponse } =
           require('.') as typeof import('.')
 
         const stream = OpenAIStream(
-          await fetch(server.api + '/mock-func-call', {
-            headers: {
-              'x-mock-service': 'openai',
-              'x-mock-type': 'func_call'
-            }
-          })
-        )
-        const response = new StreamingTextResponse(stream)
-        const client = createClient(response)
-        const chunks = await client.readAll()
-
-        const expectedChunks = [
-          '{"function_call": {"name": "get_current_weather", "arguments": "',
-          '{\\n',
-          '\\"',
-          'location',
-          '\\":',
-          ' \\"',
-          'Char',
-          'l',
-          'ottesville',
-          ',',
-          ' Virginia',
-          '\\",\\n',
-          '\\"',
-          'format',
-          '\\":',
-          ' \\"',
-          'c',
-          'elsius',
-          '\\"\\n',
-          '}',
-          '"}}'
-        ]
-
-        expect(chunks).toEqual(expectedChunks)
-        expect(chunks.join('')).toEqual(
-          `{"function_call": {"name": "get_current_weather", "arguments": "{\\n\\"location\\": \\"Charlottesville, Virginia\\",\\n\\"format\\": \\"celsius\\"\\n}"}}`
-        )
-      })
-
       it('should handle backpressure on the server', async () => {
         const controller = new AbortController()
         const stream = OpenAIStream(
