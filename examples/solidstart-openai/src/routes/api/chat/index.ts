@@ -5,12 +5,8 @@ import { APIEvent } from 'solid-start/api'
 
 // Create an OpenAI API client
 const openai = new OpenAI({
-  apiKey: process.env['OPENAI_API_KEY'] || ''
-})
-
-export const POST = async (event: APIEvent) => {
-  // Extract the `prompt` from the body of the request
-  const { messages } = await event.request.json()
+<https://github.com/vercel/ai<<<<< max/openai-4
+  apiKey: process.env['OPENAI_API_KEY']
 
   // Ask OpenAI for a streaming chat completion given the prompt
   const response = await openai.chat.completions.create({
