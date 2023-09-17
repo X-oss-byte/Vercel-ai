@@ -1,6 +1,5 @@
 import { ServerResponse, createServer } from 'node:http'
 
-import Snapshot_OpenAIChat from '../snapshots/openai-chat'
 
 async function flushDataToResponse(
   res: ServerResponse,
@@ -37,22 +36,6 @@ export const setup = () => {
 
   const server = createServer((req, res) => {
     const service = req.headers['x-mock-service'] || 'openai'
-    const type = req.headers['x-mock-type'] || 'chat'
-
-    switch (type) {
-      case 'chat':
-        switch (service) {
-          case 'openai':
-            res.writeHead(200, {
-              'Content-Type': 'text/event-stream',
-              'Cache-Control': 'no-cache',
-              Connection: 'keep-alive'
-            })
-            res.flushHeaders()
-            recentFlushed = []
-            flushDataToResponse(
-              res,
-              Snapshot_OpenAIChat.map(
                 value =>
                   new Proxy(
                     { value },

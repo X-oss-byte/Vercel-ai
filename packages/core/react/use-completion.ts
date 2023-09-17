@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import useSWRMutation from 'swr/mutation'
 import useSWR from 'swr'
-import { decodeAIStreamChunk } from '../shared/utils'
-import { UseCompletionOptions } from '../shared/types'
+
+import { createChunkDecoder } from '../shared/utils'
+import { UseCompletionOptions, RequestOptions } from '../shared/types'
 
 export type UseCompletionHelpers = {
   /** The current completion result */
@@ -10,7 +10,10 @@ export type UseCompletionHelpers = {
   /**
    * Send a new prompt to the API endpoint and update the completion state.
    */
-  complete: (prompt: string) => Promise<string | null | undefined>
+  complete: (
+    prompt: string,
+    options?: RequestOptions
+  ) => Promise<string | null | undefined>
   /** The error object of the API request */
   error: undefined | Error
   /**
@@ -32,7 +35,11 @@ export type UseCompletionHelpers = {
    * <input onChange={handleInputChange} value={input} />
    * ```
    */
-  handleInputChange: (e: any) => void
+  handleInputChange: (
+    e:
+      | React.ChangeEvent<HTMLInputElement>
+      | React.ChangeEvent<HTMLTextAreaElement>
+  ) => void
   /**
    * Form submission handler to automattically reset input and append a user message
    * @example
@@ -52,6 +59,7 @@ export function useCompletion({
   id,
   initialCompletion = '',
   initialInput = '',
+  credentials,
   headers,
   body,
   onResponse,
@@ -66,115 +74,122 @@ export function useCompletion({
   const { data, mutate } = useSWR<string>([api, completionId], null, {
     fallbackData: initialCompletion
   })
+
+  const { data: isLoading = false, mutate: mutateLoading } = useSWR<boolean>(
+    [completionId, 'loading'],
+    null
+  )
+
+  const [error, setError] = useState<undefined | Error>(undefined)
   const completion = data!
 
   // Abort controller to cancel the current API call.
   const [abortController, setAbortController] =
     useState<AbortController | null>(null)
 
-  const extraMetadataRef = useRef<any>({
+  const extraMetadataRef = useRef({
+    credentials,
     headers,
     body
   })
   useEffect(() => {
     extraMetadataRef.current = {
+      credentials,
       headers,
       body
     }
-  }, [headers, body])
+  }, [credentials, headers, body])
 
-  // Actual mutation hook to send messages to the API endpoint and update the
-  // chat state.
-  const { error, trigger, isMutating } = useSWRMutation<
-    string | null,
-    any,
-    [string, string],
-    string
-  >(
-    [api, completionId],
-    async (_, { arg: prompt }) => {
-      try {
-        const abortController = new AbortController()
-        setAbortController(abortController)
+  async function triggerRequest(prompt: string, options?: RequestOptions) {
+    try {
+      mutateLoading(true)
 
-        // Empty the completion immediately.
-        mutate('', false)
+      const abortController = new AbortController()
+      setAbortController(abortController)
 
-        const res = await fetch(api, {
-          method: 'POST',
-          body: JSON.stringify({
-            prompt,
-            ...extraMetadataRef.current.body
-          }),
-          headers: extraMetadataRef.current.headers || {},
-          signal: abortController.signal
-        }).catch(err => {
+      // Empty the completion immediately.
+      mutate('', false)
+
+      const res = await fetch(api, {
+        method: 'POST',
+        body: JSON.stringify({
+          prompt,
+          ...extraMetadataRef.current.body,
+          ...options?.body
+        }),
+        credentials: extraMetadataRef.current.credentials,
+        headers: {
+          ...extraMetadataRef.current.headers,
+          ...options?.headers
+        },
+        signal: abortController.signal
+      }).catch(err => {
+        throw err
+      })
+
+      if (onResponse) {
+        try {
+          await onResponse(res)
+        } catch (err) {
           throw err
-        })
+        }
+      }
 
-        if (onResponse) {
-          try {
-            await onResponse(res)
-          } catch (err) {
-            throw err
-          }
+      if (!res.ok) {
+        throw new Error(
+          (await res.text()) || 'Failed to fetch the chat response.'
+        )
+      }
+
+      if (!res.body) {
+        throw new Error('The response body is empty.')
+      }
+
+      let result = ''
+      const reader = res.body.getReader()
+      const decoder = createChunkDecoder()
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) {
+          break
         }
 
-        if (!res.ok) {
-          throw new Error(
-            (await res.text()) || 'Failed to fetch the chat response.'
-          )
+        // Update the completion state with the new message tokens.
+        result += decoder(value)
+        mutate(result, false)
+
+        // The request has been aborted, stop reading the stream.
+        if (abortController === null) {
+          reader.cancel()
+          break
         }
+      }
 
-        if (!res.body) {
-          throw new Error('The response body is empty.')
-        }
+      if (onFinish) {
+        onFinish(prompt, result)
+      }
 
-        let result = ''
-        const reader = res.body.getReader()
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) {
-            break
-          }
-
-          // Update the completion state with the new message tokens.
-          result += decodeAIStreamChunk(value)
-          mutate(result, false)
-
-          // The request has been aborted, stop reading the stream.
-          if (abortController === null) {
-            reader.cancel()
-            break
-          }
-        }
-
-        if (onFinish) {
-          onFinish(prompt, result)
-        }
-
+      setAbortController(null)
+      return result
+    } catch (err) {
+      // Ignore abort errors as they are expected.
+      if ((err as any).name === 'AbortError') {
         setAbortController(null)
-        return result
-      } catch (err) {
-        // Ignore abort errors as they are expected.
-        if ((err as any).name === 'AbortError') {
-          setAbortController(null)
-          return null
-        }
+        return null
+      }
 
-        if (onError && err instanceof Error) {
+      if (err instanceof Error) {
+        if (onError) {
           onError(err)
         }
-
-        throw err
       }
-    },
-    {
-      populateCache: false,
-      revalidate: false
+
+      setError(err as Error)
+    } finally {
+      mutateLoading(false)
     }
-  )
+  }
 
   const stop = useCallback(() => {
     if (abortController) {
@@ -190,27 +205,27 @@ export function useCompletion({
     [mutate]
   )
 
+  const complete = useCallback<UseCompletionHelpers['complete']>(
+    async (prompt, options) => {
+      return triggerRequest(prompt, options)
+    },
+    [triggerRequest]
+  )
+
   const [input, setInput] = useState(initialInput)
 
   const handleSubmit = useCallback(
     (e: React.FormEvent<HTMLFormElement>) => {
       e.preventDefault()
       if (!input) return
-      return trigger(input)
+      return complete(input)
     },
-    [input, trigger]
+    [input, complete]
   )
 
   const handleInputChange = (e: any) => {
     setInput(e.target.value)
   }
-
-  const complete = useCallback(
-    async (prompt: string) => {
-      return trigger(prompt)
-    },
-    [trigger]
-  )
 
   return {
     completion,
@@ -222,6 +237,6 @@ export function useCompletion({
     setInput,
     handleInputChange,
     handleSubmit,
-    isLoading: isMutating
+    isLoading
   }
 }
